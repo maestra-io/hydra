@@ -391,6 +391,8 @@ func applyTableNameWithIndexHint(conn *pop.Connection, table string, index strin
 	case "mysql":
 		return table + " USE INDEX(" + index + ")"
 	default:
+		// PostgreSQL and YugabyteDB do not accept these dialect-specific index
+		// hint syntaxes.
 		return table
 	}
 }
@@ -517,8 +519,8 @@ func clientFlowTableNamesWithQueryHint(dialect string) (clientTable, flowTable s
 	switch dialect {
 	case "cockroach":
 		return "hydra_client@primary", "hydra_oauth2_flow@hydra_oauth2_flow_login_session_subject_idx"
-	// TODO: more
 	default:
+		// PostgreSQL and YugabyteDB do not accept CockroachDB's @index syntax.
 		return "hydra_client", "hydra_oauth2_flow"
 	}
 }

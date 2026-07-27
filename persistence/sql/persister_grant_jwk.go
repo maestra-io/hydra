@@ -173,7 +173,8 @@ func (p *Persister) GetPublicKey(ctx context.Context, issuer string, subject str
 	defer otelx.End(span, &err)
 
 	tableName := SQLGrant{}.TableName()
-	// Index hint.
+	// This @index hint is CockroachDB-only; PostgreSQL and YugabyteDB use the
+	// unadorned table name.
 	if p.Connection(ctx).Dialect.Name() == "cockroach" {
 		tableName += "@hydra_oauth2_trusted_jwt_bearer_issuer_nid_uq_idx"
 	}
@@ -264,7 +265,8 @@ func (p *Persister) GetPublicKeyScopes(ctx context.Context, issuer string, subje
 	defer otelx.End(span, &err)
 
 	tableName := SQLGrant{}.TableName()
-	// Index hint.
+	// This @index hint is CockroachDB-only; PostgreSQL and YugabyteDB use the
+	// unadorned table name.
 	if p.Connection(ctx).Dialect.Name() == "cockroach" {
 		tableName += "@hydra_oauth2_trusted_jwt_bearer_issuer_nid_uq_idx"
 	}

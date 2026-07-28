@@ -23,7 +23,7 @@ func TestGetJWKS(t *testing.T) {
 	reg := setup(t, c)
 
 	set := uuid.Must(uuid.NewV4()).String()
-	_ = createJWK(t, reg, set, "RS256")
+	_ = createJWK(t, reg, set, "ES256")
 
 	t.Run("case=gets jwks", func(t *testing.T) {
 		actual := gjson.Parse(cmdx.ExecNoErr(t, c, set))
@@ -86,7 +86,7 @@ func TestGetJWKS(t *testing.T) {
 		assert.Equal(t, set, actual.Get("set").String(), actual.Raw)
 
 		assert.NotEmptyf(t, actual.Get("kid").String(), "Expected kid to be set but got: %s", actual.Raw)
-		assert.Empty(t, actual.Get("p").String(), "public key should not contain private key components: %s", actual.Raw)
+		assert.Empty(t, actual.Get("d").String(), "public key should not contain private key components: %s", actual.Raw)
 	})
 
 	t.Run("case=table output contains the set name", func(t *testing.T) {

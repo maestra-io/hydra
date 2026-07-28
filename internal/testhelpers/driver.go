@@ -25,6 +25,7 @@ import (
 	"github.com/ory/x/configx"
 	"github.com/ory/x/contextx"
 	"github.com/ory/x/dbal"
+	"github.com/ory/x/httpx"
 	"github.com/ory/x/logrusx"
 	"github.com/ory/x/servicelocatorx"
 	"github.com/ory/x/sqlcon/dockertest"
@@ -67,6 +68,10 @@ func NewRegistrySQLFromURL(t testing.TB, dsn string, migrate, initNetwork bool, 
 		driver.SkipNetworkInit(),
 		driver.WithConfigOptions(configOpts...),
 		driver.WithServiceLocatorOptions(servicelocatorx.WithContextualizer(contextx.NewTestConfigProvider(spec.ConfigValidationSchema, configOpts...))),
+		driver.WithHTTPClientOptions(
+			httpx.ResilientClientWithMinRetryWait(time.Millisecond),
+			httpx.ResilientClientWithMaxRetryWait(time.Millisecond),
+		),
 	}, opts...)
 
 	reg, err := driver.New(t.Context(), regOpts...)

@@ -18,6 +18,7 @@ import (
 	"net/url"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -1350,13 +1351,18 @@ func TestAuthCodeWithDefaultStrategy(t *testing.T) {
 				// * A test suite with a variety of concurrent refresh token chains.
 				run := func(t *testing.T, strategy string) {
 					c, conf := newOAuth2Client(t, reg, testhelpers.NewCallbackURL(t, "callback", testhelpers.HTTPServerNotImplementedHandler))
+					flowTransport := testhelpers.NewTestTransport(t)
 					testhelpers.NewLoginConsentUI(t, reg.Config(),
 						acceptLoginHandler(t, c, adminClient, reg, subject, nil),
 						acceptConsentHandler(t, c, adminClient, reg, subject, nil),
 					)
 
 					issueTokens := func(t *testing.T) *oauth2.Token {
-						code, _ := getAuthorizeCode(t, conf, nil, oauth2.SetAuthURLParam("nonce", nonce))
+						flowClient := &http.Client{
+							Jar:       testhelpers.NewEmptyCookieJar(t),
+							Transport: flowTransport,
+						}
+						code, _ := getAuthorizeCode(t, conf, flowClient, oauth2.SetAuthURLParam("nonce", nonce))
 						require.NotEmpty(t, code)
 						token, err := conf.Exchange(context.Background(), code)
 						iat := time.Now()
@@ -1428,10 +1434,11 @@ func TestAuthCodeWithDefaultStrategy(t *testing.T) {
 
 					t.Run("an expired refresh token can not be used even if we are in the grace period", func(t *testing.T) {
 						reg.Config().MustSet(ctx, config.KeyRefreshTokenRotationGracePeriod, "5s")
-						reg.Config().MustSet(ctx, config.KeyRefreshTokenLifespan, "1s")
+						reg.Config().MustSet(ctx, config.KeyRefreshTokenLifespan, "1m")
 
 						token := issueTokens(t)
-						time.Sleep(time.Second * 2) // Let token expire - we need 2 seconds to reliably be longer than TTL
+						refreshTokenExchange(t, token)
+						expireRefreshToken(t, reg, token.RefreshToken)
 
 						token.Expiry = time.Now().Add(-time.Hour * 24)
 						_, err := conf.TokenSource(ctx, token).Token()
@@ -1448,7 +1455,7 @@ func TestAuthCodeWithDefaultStrategy(t *testing.T) {
 						token := issueTokens(t)
 						refreshed := refreshTokens(t, token)
 
-						time.Sleep(time.Second * 2) // Wait for the grace period to end
+						backdateRefreshTokenFirstUsedAt(t, reg, token.RefreshToken, 2*time.Second)
 
 						token.Expiry = time.Now().Add(-time.Hour * 24)
 						_, err := conf.TokenSource(ctx, token).Token()
@@ -1483,7 +1490,7 @@ func TestAuthCodeWithDefaultStrategy(t *testing.T) {
 						reg.Config().Delete(ctx, config.KeyTokenHook)
 						reg.Config().Delete(ctx, config.KeyRefreshTokenHook)
 
-						createTokenGenerations := func(t *testing.T, count int, sleep time.Duration) [][]*oauth2.Token {
+						createTokenGenerations := func(t *testing.T, count int, elapseGracePeriod bool) [][]*oauth2.Token {
 							generations := make([][]*oauth2.Token, count)
 							generations[0] = []*oauth2.Token{issueTokens(t)}
 							// Start from the first generation. For every next generation, we refresh all the tokens of the previous generation twice.
@@ -1531,7 +1538,11 @@ func TestAuthCodeWithDefaultStrategy(t *testing.T) {
 								}
 
 								wg.Wait()
-								time.Sleep(sleep)
+								if elapseGracePeriod {
+									for _, token := range generations[i] {
+										backdateRefreshTokenFirstUsedAt(t, reg, token.RefreshToken, aboveGracePeriod)
+									}
+								}
 							}
 							return generations
 						}
@@ -1540,7 +1551,7 @@ func TestAuthCodeWithDefaultStrategy(t *testing.T) {
 							reg.Config().MustSet(ctx, config.KeyRefreshTokenRotationGracePeriod, "1s")
 							reg.Config().MustSet(ctx, config.KeyRefreshTokenLifespan, "1m")
 							// This test only works if the refresh token lifespan is longer than the grace period.
-							generations := createTokenGenerations(t, 4, time.Second*2)
+							generations := createTokenGenerations(t, 4, true)
 
 							generationIndex := rng.Intn(len(generations) - 1) // Exclude the last generation
 							tokenIndex := rng.Intn(len(generations[generationIndex]))
@@ -1572,7 +1583,7 @@ func TestAuthCodeWithDefaultStrategy(t *testing.T) {
 								reg.Config().MustSet(ctx, config.KeyRefreshTokenLifespan, "1m")
 								reg.Config().MustSet(ctx, config.KeyRefreshTokenRotationGraceReuseCount, 0)
 							})
-							generations := createTokenGenerations(t, 4, time.Second*2)
+							generations := createTokenGenerations(t, 4, false)
 
 							token := generations[0][0]
 							token.Expiry = time.Now().Add(-time.Hour * 24)
@@ -1592,10 +1603,10 @@ func TestAuthCodeWithDefaultStrategy(t *testing.T) {
 							}
 						})
 
-						for _, withSleep := range []time.Duration{0, aboveGracePeriod} {
-							t.Run(fmt.Sprintf("withSleep=%s", withSleep), func(t *testing.T) {
+						for _, elapseGracePeriod := range []bool{false, true} {
+							t.Run(fmt.Sprintf("elapseGracePeriod=%t", elapseGracePeriod), func(t *testing.T) {
 								createTokenGenerations := func(t *testing.T, count int) [][]*oauth2.Token {
-									return createTokenGenerations(t, count, withSleep)
+									return createTokenGenerations(t, count, elapseGracePeriod)
 								}
 
 								t.Run("only the most recent token generation is valid across the board", func(t *testing.T) {
@@ -1649,7 +1660,7 @@ func TestAuthCodeWithDefaultStrategy(t *testing.T) {
 									token := generations[len(generations)-1][0]
 
 									finalToken := refreshTokens(t, token)
-									time.Sleep(aboveGracePeriod) // Wait for the grace period to end
+									backdateRefreshTokenFirstUsedAt(t, reg, token.RefreshToken, aboveGracePeriod)
 
 									token.Expiry = time.Now().Add(-time.Hour * 24)
 									_, err := conf.TokenSource(ctx, token).Token()
@@ -2358,7 +2369,9 @@ func TestAuthCodeWithMockStrategy(t *testing.T) {
 					t.Run("should fail token refresh with `server_error` if refresh hook fails", func(t *testing.T) {
 						run := func(hookType string) func(t *testing.T) {
 							return func(t *testing.T) {
+								var requests atomic.Int32
 								hs := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+									requests.Add(1)
 									w.WriteHeader(http.StatusInternalServerError)
 								}))
 								defer hs.Close()
@@ -2374,6 +2387,7 @@ func TestAuthCodeWithMockStrategy(t *testing.T) {
 								res, err := testRefresh(t, &refreshedToken, publicTs.URL, false)
 								require.NoError(t, err)
 								assert.Equal(t, http.StatusInternalServerError, res.StatusCode)
+								require.EqualValues(t, 3, requests.Load(), "expected the initial hook request plus two retries")
 
 								var errBody fosite.RFC6749ErrorJson
 								require.NoError(t, json.NewDecoder(res.Body).Decode(&errBody))

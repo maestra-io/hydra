@@ -446,6 +446,7 @@ func testHelperRevokeAccessToken(x *driver.RegistrySQL) func(t *testing.T) {
 func testHelperRotateRefreshToken(x *driver.RegistrySQL) func(t *testing.T) {
 	return func(t *testing.T) {
 		ctx := t.Context()
+		const gracePeriod = time.Minute
 
 		createTokens := func(t *testing.T, r *fosite.Request) (refreshTokenSession string, accessTokenSession string) {
 			refreshTokenSession = fmt.Sprintf("refresh_token_%s", uuid.Must(uuid.NewV4()).String())
@@ -561,7 +562,7 @@ func testHelperRotateRefreshToken(x *driver.RegistrySQL) func(t *testing.T) {
 		})
 
 		t.Run("refresh token is valid until the grace period has ended", func(t *testing.T) {
-			x.Config().MustSet(ctx, config.KeyRefreshTokenRotationGracePeriod, "1s")
+			x.Config().MustSet(ctx, config.KeyRefreshTokenRotationGracePeriod, gracePeriod)
 
 			// By setting this to one hour we ensure that using the refresh token triggers the start of the grace period.
 			x.Config().MustSet(ctx, config.KeyRefreshTokenLifespan, "1h")
@@ -590,15 +591,13 @@ func testHelperRotateRefreshToken(x *driver.RegistrySQL) func(t *testing.T) {
 			assert.NoError(t, err)
 			assert.Equal(t, r.GetID(), req.GetID())
 
-			// We only wait a second, meaning that the token is theoretically still within TTL, but since the
-			// grace period was issued, the token is still valid.
-			time.Sleep(time.Second * 2)
+			backdateRefreshTokenFirstUsedAtBySignature(t, x, refreshTokenSession, gracePeriod+time.Second)
 			_, err = m.GetRefreshTokenSession(ctx, refreshTokenSession, nil)
 			assert.Error(t, err)
 		})
 
 		t.Run("the used at time does not change", func(t *testing.T) {
-			x.Config().MustSet(ctx, config.KeyRefreshTokenRotationGracePeriod, "1s")
+			x.Config().MustSet(ctx, config.KeyRefreshTokenRotationGracePeriod, gracePeriod)
 
 			// By setting this to one hour we ensure that using the refresh token triggers the start of the grace period.
 			x.Config().MustSet(ctx, config.KeyRefreshTokenLifespan, "1h")
@@ -612,13 +611,13 @@ func testHelperRotateRefreshToken(x *driver.RegistrySQL) func(t *testing.T) {
 			refreshTokenSession, _ := createTokens(t, r)
 			require.NoError(t, m.RotateRefreshToken(ctx, r.GetID(), refreshTokenSession))
 
+			backdateRefreshTokenFirstUsedAtBySignature(t, x, refreshTokenSession, gracePeriod+time.Second)
 			var expected sql.OAuth2RefreshTable
 			require.NoError(t, x.Persister().Connection(ctx).Where("signature=?", refreshTokenSession).First(&expected))
 			assert.False(t, expected.FirstUsedAt.Time.IsZero())
 			assert.True(t, expected.FirstUsedAt.Valid)
 
 			// Refresh does not change the time
-			time.Sleep(time.Second * 2)
 			require.NoError(t, m.RotateRefreshToken(ctx, r.GetID(), refreshTokenSession))
 
 			var actual sql.OAuth2RefreshTable
@@ -627,7 +626,7 @@ func testHelperRotateRefreshToken(x *driver.RegistrySQL) func(t *testing.T) {
 		})
 
 		t.Run("refresh token revokes all access tokens from the request if the access token signature is not found", func(t *testing.T) {
-			x.Config().MustSet(ctx, config.KeyRefreshTokenRotationGracePeriod, "1s")
+			x.Config().MustSet(ctx, config.KeyRefreshTokenRotationGracePeriod, gracePeriod)
 			t.Cleanup(func() {
 				x.Config().Delete(ctx, config.KeyRefreshTokenRotationGracePeriod)
 			})
@@ -659,7 +658,7 @@ func testHelperRotateRefreshToken(x *driver.RegistrySQL) func(t *testing.T) {
 			assert.NoError(t, err)
 			assert.Equal(t, r.GetID(), req.GetID())
 
-			time.Sleep(time.Second * 2)
+			backdateRefreshTokenFirstUsedAtBySignature(t, x, refreshTokenSession, gracePeriod+time.Second)
 
 			_, err = m.GetRefreshTokenSession(ctx, refreshTokenSession, nil)
 			assert.Error(t, err)

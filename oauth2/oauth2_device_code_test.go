@@ -239,11 +239,6 @@ func TestDeviceCodeWithDefaultStrategy(t *testing.T) {
 		config.KeyRefreshTokenHook:    "",
 	})))
 	publicTS, adminTS := testhelpers.NewOAuth2Server(ctx, t, reg)
-	// waitForRefreshTokenExpiry sleeps a full refresh-token lifespan to prove a
-	// refresh token stops working once expired. The shared 20s default dominates
-	// this test's runtime; 5s is still ~100x the sub-second refresh flow it must
-	// outlive, so it keeps the expiry assertion valid while cutting the wait.
-	reg.Config().MustSet(ctx, config.KeyRefreshTokenLifespan, 5*time.Second)
 
 	publicClient := hydra.NewAPIClient(hydra.NewConfiguration())
 	publicClient.GetConfig().Servers = hydra.ServerConfigurations{{URL: publicTS.URL}}
@@ -417,10 +412,6 @@ func TestDeviceCodeWithDefaultStrategy(t *testing.T) {
 		return i
 	}
 
-	waitForRefreshTokenExpiry := func() {
-		time.Sleep(reg.Config().GetRefreshTokenLifespan(ctx) + time.Second)
-	}
-
 	t.Run("case=checks if request fails when audience does not match", func(t *testing.T) {
 		testhelpers.NewLoginConsentUI(t, reg.Config(), testhelpers.HTTPServerNoExpectedCallHandler(t), testhelpers.HTTPServerNoExpectedCallHandler(t))
 		_, conf := newDeviceClient(t, reg)
@@ -557,18 +548,18 @@ func TestDeviceCodeWithDefaultStrategy(t *testing.T) {
 					assert.False(t, i.Get("active").Bool(), "%s", i)
 				})
 
-				t.Run("followup=original refresh token is no longer valid", func(t *testing.T) {
-					_, err := conf.TokenSource(context.Background(), token).Token()
-					assert.Error(t, err)
-				})
-
 				t.Run("followup=but fail subsequent refresh because expiry was reached", func(t *testing.T) {
-					waitForRefreshTokenExpiry()
+					expireRefreshToken(t, reg, refreshedToken.RefreshToken)
 
 					// Force golang to refresh token
 					refreshedToken.Expiry = refreshedToken.Expiry.Add(-time.Hour * 24)
 					_, err := conf.TokenSource(context.Background(), refreshedToken).Token()
 					require.Error(t, err)
+				})
+
+				t.Run("followup=original refresh token is no longer valid", func(t *testing.T) {
+					_, err := conf.TokenSource(context.Background(), token).Token()
+					assert.Error(t, err)
 				})
 			})
 		}

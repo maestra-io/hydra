@@ -93,6 +93,7 @@ type RegistrySQL struct {
 	fositeFactories             []fositex.Factory
 	migrator                    *sql.MigrationManager
 	dbOptsModifier              []func(details *pop.ConnectionDetails)
+	httpClientOpts              []httpx.ResilientOptions
 
 	keyManager     jwk.Manager
 	consentManager consent.Manager
@@ -462,19 +463,22 @@ func (m *RegistrySQL) CookieStore(ctx context.Context) (sessions.Store, error) {
 }
 
 func (m *RegistrySQL) HTTPClient(_ context.Context, opts ...httpx.ResilientOptions) *retryablehttp.Client {
-	opts = append(opts,
+	clientOpts := []httpx.ResilientOptions{
 		httpx.ResilientClientWithLogger(m.Logger()),
 		httpx.ResilientClientWithMaxRetry(2),
-		httpx.ResilientClientWithConnectionTimeout(30*time.Second))
+		httpx.ResilientClientWithConnectionTimeout(30 * time.Second),
+	}
 
+	clientOpts = append(clientOpts, m.httpClientOpts...)
+	clientOpts = append(clientOpts, opts...)
 	if m.Config().ClientHTTPNoPrivateIPRanges() {
-		opts = append(
-			opts,
+		clientOpts = append(
+			clientOpts,
 			httpx.ResilientClientDisallowInternalIPs(),
 			httpx.ResilientClientAllowInternalIPRequestsTo(m.Config().ClientHTTPPrivateIPExceptionURLs()...),
 		)
 	}
-	return httpx.NewResilientClient(opts...)
+	return httpx.NewResilientClient(clientOpts...)
 }
 
 func (m *RegistrySQL) OAuth2Provider() fosite.OAuth2Provider {

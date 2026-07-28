@@ -12,7 +12,9 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strconv"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/gorilla/sessions"
 	pkgerr "github.com/pkg/errors"
@@ -27,6 +29,7 @@ import (
 	"github.com/ory/hydra/v2/persistence/sql"
 	"github.com/ory/x/configx"
 	"github.com/ory/x/dbal"
+	"github.com/ory/x/httpx"
 	"github.com/ory/x/logrusx"
 	"github.com/ory/x/popx"
 	"github.com/ory/x/randx"
@@ -130,7 +133,9 @@ func TestRegistrySQL_HTTPClient(t *testing.T) {
 		config.KeyDSN:                              dbal.NewSQLiteTestDatabase(t),
 		config.KeyClientHTTPNoPrivateIPRanges:      true,
 		config.KeyClientHTTPPrivateIPExceptionURLs: []string{ts.URL + "/exception/*"},
-	})))
+	})), WithHTTPClientOptions(
+		httpx.ResilientClientAllowInternalIPRequestsTo(ts.URL+"/*"),
+	))
 	require.NoError(t, err)
 
 	t.Run("case=matches exception glob", func(t *testing.T) {
@@ -140,9 +145,54 @@ func TestRegistrySQL_HTTPClient(t *testing.T) {
 	})
 
 	t.Run("case=does not match exception glob", func(t *testing.T) {
-		_, err := r.HTTPClient(t.Context()).Get(ts.URL + "/foo")
+		_, err := r.HTTPClient(
+			t.Context(),
+			httpx.ResilientClientAllowInternalIPRequestsTo(ts.URL+"/*"),
+		).Get(ts.URL + "/foo")
 		assert.Error(t, err)
 	})
+}
+
+func TestRegistrySQL_HTTPClientOptions(t *testing.T) {
+	t.Parallel()
+
+	newRegistry := func(t *testing.T, opts ...OptionsModifier) *RegistrySQL {
+		t.Helper()
+		opts = append([]OptionsModifier{
+			SkipNetworkInit(),
+			DisableValidation(),
+			WithConfigOptions(configx.WithValue(config.KeyDSN, dbal.NewSQLiteTestDatabase(t))),
+		}, opts...)
+		r, err := New(t.Context(), opts...)
+		require.NoError(t, err)
+		return r
+	}
+
+	defaultClient := newRegistry(t).HTTPClient(t.Context())
+	assert.Equal(t, 2, defaultClient.RetryMax)
+	assert.Equal(t, time.Second, defaultClient.RetryWaitMin)
+	assert.Equal(t, 30*time.Second, defaultClient.RetryWaitMax)
+
+	var requests atomic.Int32
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		requests.Add(1)
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	t.Cleanup(ts.Close)
+
+	fastClient := newRegistry(t, WithHTTPClientOptions(
+		httpx.ResilientClientWithMinRetryWait(time.Millisecond),
+		httpx.ResilientClientWithMaxRetryWait(time.Millisecond),
+	)).HTTPClient(t.Context())
+	assert.Equal(t, 2, fastClient.RetryMax)
+	assert.Equal(t, time.Millisecond, fastClient.RetryWaitMin)
+	assert.Equal(t, time.Millisecond, fastClient.RetryWaitMax)
+
+	start := time.Now()
+	_, err := fastClient.Get(ts.URL)
+	require.Error(t, err)
+	require.Less(t, time.Since(start), time.Second)
+	require.EqualValues(t, 3, requests.Load(), "expected the initial request plus two retries")
 }
 
 func TestDefaultKeyManager_HsmDisabled(t *testing.T) {

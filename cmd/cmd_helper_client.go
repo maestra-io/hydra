@@ -13,7 +13,6 @@ import (
 	"github.com/spf13/pflag"
 
 	hydra "github.com/ory/hydra-client-go/v2"
-	"github.com/ory/hydra/v2/cmd/cli"
 	"github.com/ory/x/flagx"
 )
 
@@ -121,9 +120,9 @@ func clientPatchFromFlags(cmd *cobra.Command) []hydra.JsonPatch {
 
 func registerEncryptFlags(flags *pflag.FlagSet) {
 	// encrypt client secret options
-	flags.String(cli.FlagEncryptionPGPKey, "", "Base64 encoded PGP encryption key for encrypting client secret.")
-	flags.String(cli.FlagEncryptionPGPKeyURL, "", "PGP encryption key URL for encrypting client secret.")
-	flags.String(cli.FlagEncryptionKeybase, "", "Keybase username for encrypting client secret.")
+	flags.String(FlagEncryptionPGPKey, "", "Base64 encoded PGP encryption key for encrypting client secret.")
+	flags.String(FlagEncryptionPGPKeyURL, "", "PGP encryption key URL for encrypting client secret.")
+	flags.String(FlagEncryptionKeybase, "", "Keybase username for encrypting client secret.")
 }
 
 func registerClientFlags(flags *pflag.FlagSet) {

@@ -9,7 +9,6 @@ import (
 	"github.com/spf13/cobra"
 
 	hydra "github.com/ory/hydra-client-go/v2"
-	"github.com/ory/hydra/v2/cmd/cli"
 	"github.com/ory/hydra/v2/cmd/cliclient"
 	"github.com/ory/x/cmdx"
 	"github.com/ory/x/flagx"
@@ -37,7 +36,7 @@ To replace the entire client with a new configuration, use the --file flag. Fiel
 			}
 
 			secret := flagx.MustGetString(cmd, "secret")
-			ek, encryptSecret, err := cli.NewEncryptionKey(cmd, nil)
+			ek, encryptSecret, err := NewEncryptionKey(cmd, nil)
 			if err != nil {
 				return err
 			}

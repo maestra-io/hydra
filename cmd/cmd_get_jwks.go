@@ -7,7 +7,6 @@ import (
 	"github.com/spf13/cobra"
 
 	hydra "github.com/ory/hydra-client-go/v2"
-	"github.com/ory/hydra/v2/jwk"
 	"github.com/ory/x/flagx"
 
 	"github.com/ory/hydra/v2/cmd/cliclient"
@@ -53,7 +52,7 @@ To get the JSON Web Key Set as only public keys:
 				for i, key := range sets.Keys {
 					keys[i] = key.JsonWebKey
 				}
-				keys, err = jwk.OnlyPublicSDKKeys(keys)
+				keys, err = OnlyPublicSDKKeys(keys)
 				if err != nil {
 					return err
 				}

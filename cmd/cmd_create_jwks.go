@@ -6,8 +6,6 @@ package cmd
 import (
 	"context"
 
-	"github.com/ory/hydra/v2/jwk"
-
 	"github.com/spf13/cobra"
 
 	hydra "github.com/ory/hydra-client-go/v2"
@@ -49,7 +47,7 @@ func NewCreateJWKSCmd() *cobra.Command {
 			}
 
 			if flagx.MustGetBool(cmd, "public") {
-				jwks.Keys, err = jwk.OnlyPublicSDKKeys(jwks.Keys)
+				jwks.Keys, err = OnlyPublicSDKKeys(jwks.Keys)
 				if err != nil {
 					return err
 				}

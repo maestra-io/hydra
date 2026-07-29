@@ -1,11 +1,18 @@
 // Copyright © 2022 Ory Corp
 // SPDX-License-Identifier: Apache-2.0
 
-package cli
+package cmd
 
 import (
+	"encoding/json"
 	"testing"
 
+	jose "github.com/go-jose/go-jose/v3"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
+	hydra "github.com/ory/hydra-client-go/v2"
+	"github.com/ory/hydra/v2/jwk"
 	"github.com/ory/x/josex"
 )
 
@@ -63,4 +70,21 @@ func Test_toSDKFriendlyJSONWebKey(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestOnlyPublicSDKKeys(t *testing.T) {
+	set, err := jwk.GenerateJWK(jose.RS256, "test-id-1", "sig")
+	require.NoError(t, err)
+
+	out, err := json.Marshal(set.Keys)
+	require.NoError(t, err)
+
+	var sdkSet []hydra.JsonWebKey
+	require.NoError(t, json.Unmarshal(out, &sdkSet))
+
+	assert.NotEmpty(t, sdkSet[0].P)
+	result, err := OnlyPublicSDKKeys(sdkSet)
+	require.NoError(t, err)
+
+	assert.Empty(t, result[0].P)
 }

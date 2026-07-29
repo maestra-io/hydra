@@ -1,7 +1,7 @@
 // Copyright © 2022 Ory Corp
 // SPDX-License-Identifier: Apache-2.0
 
-package cmd
+package servercmd
 
 import (
 	"fmt"
@@ -13,6 +13,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/ory/hydra/v2/cmd"
 	"github.com/ory/hydra/v2/driver"
 )
 
@@ -27,49 +28,49 @@ func NewRootCmd(opts ...driver.OptionsModifier) *cobra.Command {
 }
 
 func RegisterCommandRecursive(parent *cobra.Command, opts ...driver.OptionsModifier) {
-	createCmd := NewCreateCmd()
+	createCmd := cmd.NewCreateCmd()
 	createCmd.AddCommand(
-		NewCreateClientsCommand(),
-		NewCreateJWKSCmd(),
+		cmd.NewCreateClientsCommand(),
+		cmd.NewCreateJWKSCmd(),
 	)
 
-	getCmd := NewGetCmd()
+	getCmd := cmd.NewGetCmd()
 	getCmd.AddCommand(
-		NewGetClientsCmd(),
-		NewGetJWKSCmd(),
+		cmd.NewGetClientsCmd(),
+		cmd.NewGetJWKSCmd(),
 	)
 
-	deleteCmd := NewDeleteCmd()
+	deleteCmd := cmd.NewDeleteCmd()
 	deleteCmd.AddCommand(
-		NewDeleteClientCmd(),
-		NewDeleteJWKSCommand(),
-		NewDeleteAccessTokensCmd(),
+		cmd.NewDeleteClientCmd(),
+		cmd.NewDeleteJWKSCommand(),
+		cmd.NewDeleteAccessTokensCmd(),
 	)
 
-	listCmd := NewListCmd()
-	listCmd.AddCommand(NewListClientsCmd())
+	listCmd := cmd.NewListCmd()
+	listCmd.AddCommand(cmd.NewListClientsCmd())
 
-	updateCmd := NewUpdateCmd()
-	updateCmd.AddCommand(NewUpdateClientCmd())
+	updateCmd := cmd.NewUpdateCmd()
+	updateCmd.AddCommand(cmd.NewUpdateClientCmd())
 
-	importCmd := NewImportCmd()
+	importCmd := cmd.NewImportCmd()
 	importCmd.AddCommand(
-		NewImportClientCmd(),
-		NewKeysImportCmd(),
+		cmd.NewImportClientCmd(),
+		cmd.NewKeysImportCmd(),
 	)
 
-	performCmd := NewPerformCmd()
+	performCmd := cmd.NewPerformCmd()
 	performCmd.AddCommand(
-		NewPerformClientCredentialsCmd(),
-		NewPerformAuthorizationCodeCmd(),
-		NewPerformDeviceCodeCmd(),
+		cmd.NewPerformClientCredentialsCmd(),
+		cmd.NewPerformAuthorizationCodeCmd(),
+		cmd.NewPerformDeviceCodeCmd(),
 	)
 
-	revokeCmd := NewRevokeCmd()
-	revokeCmd.AddCommand(NewRevokeTokenCmd())
+	revokeCmd := cmd.NewRevokeCmd()
+	revokeCmd.AddCommand(cmd.NewRevokeTokenCmd())
 
-	introspectCmd := NewIntrospectCmd()
-	introspectCmd.AddCommand(NewIntrospectTokenCmd())
+	introspectCmd := cmd.NewIntrospectCmd()
+	introspectCmd.AddCommand(cmd.NewIntrospectTokenCmd())
 
 	migrateCmd := NewMigrateCmd()
 	migrateCmd.AddCommand(NewMigrateSQLCmd(opts))

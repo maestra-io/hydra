@@ -27,6 +27,23 @@ RUN go mod download
 
 COPY . .
 
+# Security floor for indirect deps upstream hasn't bumped yet (SOC board
+# HIGHs). Applied only when the checked-out go.mod is BELOW the floor, so an
+# upstream bump past it is never downgraded and go.mod in the repo stays
+# identical to upstream (no merge conflicts on "Update branch"). Extend the
+# floor list if the board flags more.
+RUN set -eu; \
+    floor() { \
+      cur="$(go list -m -f '{{.Version}}' "$1")"; \
+      if [ "$(printf '%s\n%s\n' "$2" "$cur" | sort -V | head -n1)" != "$2" ]; then \
+        echo "floor: $1 $cur -> $2"; go get "$1@$2"; \
+      else \
+        echo "floor: $1 $cur already >= $2"; \
+      fi; \
+    }; \
+    floor golang.org/x/mod v0.40.0; \
+    go mod tidy
+
 ARG HYDRA_VERSION=master
 # -buildvcs=false: without it Go stamps a pseudo-version from the CI checkout
 # (shallow, partially ignored) that sorts BELOW every release, so scanners

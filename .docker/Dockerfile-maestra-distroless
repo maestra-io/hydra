@@ -1,0 +1,47 @@
+# Maestra addition — NOT an upstream file (safe under "Update branch" merges).
+#
+# Source-build of hydra from this fork's master into a shell-less distroless
+# image. Exists because upstream master carries dependency security fixes
+# (pgx 5.10.0, x/net 0.56.0, go 1.26 stdlib) that no released oryd/hydra tag
+# has — last upstream release v26.2.0 was cut 2026-03-20 with pgx 5.7.5.
+# Drop this pipeline and return to oryd/hydra:<tag>-distroless once upstream
+# cuts a release carrying the fixes (issues-maestra#1307).
+#
+# Mirrors upstream .docker/Dockerfile-local-build, with two deltas:
+#   - runtime base is `nonroot` (no busybox), not `debug-nonroot`;
+#   - the version the binary reports is stamped via HYDRA_VERSION
+#     (same -X target goreleaser uses: .goreleaser.yml `buildinfo_tag`).
+FROM golang:1.26 AS builder
+
+WORKDIR /go/src/github.com/ory/hydra
+
+COPY oryx/go.mod oryx/go.mod
+COPY oryx/go.sum oryx/go.sum
+
+RUN mkdir -p ./internal/httpclient
+
+COPY go.mod go.sum ./
+COPY internal/httpclient/go.* ./internal/httpclient/
+
+RUN go mod download
+
+COPY . .
+
+ARG HYDRA_VERSION=master
+# -buildvcs=false: without it Go stamps a pseudo-version from the CI checkout
+# (shallow, partially ignored) that sorts BELOW every release, so scanners
+# report advisories this build already fixes — upstream documents this trap
+# in Dockerfile-local-build.
+RUN CGO_ENABLED=0 go build -buildvcs=false \
+    -ldflags "-X github.com/ory/hydra/v2/driver/config.Version=${HYDRA_VERSION}" \
+    -o /usr/bin/hydra
+
+FROM gcr.io/distroless/static-debian12:nonroot
+
+COPY --from=builder /usr/bin/hydra /usr/bin/hydra
+
+# 4444 public, 4445 admin
+EXPOSE 4444 4445
+
+ENTRYPOINT ["hydra"]
+CMD ["serve", "all"]

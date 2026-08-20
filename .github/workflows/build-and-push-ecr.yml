@@ -1,0 +1,131 @@
+# Maestra addition — NOT an upstream file (safe under "Update branch" merges).
+#
+# Builds .docker/Dockerfile-maestra-distroless from this fork's master and
+# pushes it to the private ECR as `hydra:master-<date>-<sha7>` + `latest`.
+# Runs on every push to master — i.e. automatically after each one-click
+# "Update branch" sync from ory/hydra — and on manual dispatch.
+# Auth is the standard image-push pattern: GitHub OIDC → Teleport tbot
+# workload identity → AWS STS → ECR (token image-push-github-actions-hydra,
+# defined in fluxcd teleport-maestra/image-push-workload-identity.yaml).
+name: Build and Push to ECR
+
+on:
+  push:
+    branches: [master]
+  workflow_dispatch:
+
+concurrency:
+  group: build-and-push-ecr
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  ECR_REGISTRY: 515260921971.dkr.ecr.eu-central-1.amazonaws.com
+  AWS_REGION: eu-central-1
+  TELEPORT_FQDN: teleport.maestra.io:443
+  TELEPORT_TOKEN: image-push-github-actions-hydra
+  AWS_ROLE_ARN: "arn:aws:iam::515260921971:role/teleport-image-push"
+  IMAGE_NAME: hydra
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    env:
+      DOCKER_BUILDKIT: 1
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7
+        with:
+          persist-credentials: false
+
+      - name: Get Teleport version
+        id: tp-version
+        run: |
+          VERSION=$(curl -sf "https://${{ env.TELEPORT_FQDN }}/webapi/find" | jq -r '.auto_update.tools_version // .server_version')
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Teleport binaries
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6
+        with:
+          path: ${{ runner.tool_cache }}/teleport
+          key: teleport-${{ steps.tp-version.outputs.version }}-${{ runner.os }}-${{ runner.arch }}
+
+      - name: Install Teleport
+        uses: teleport-actions/setup@b638ff596557cc3959eb6b5287d5e58e0c8ac6a6  # v1
+        with:
+          version: ${{ steps.tp-version.outputs.version }}
+          proxy: ${{ env.TELEPORT_FQDN }}
+
+      - name: ECR login via Teleport Workload Identity
+        run: |
+          cat > /tmp/tbot.yaml << EOF_TBOT
+          version: v2
+          proxy_server: ${{ env.TELEPORT_FQDN }}
+          onboarding:
+            join_method: github
+            token: ${{ env.TELEPORT_TOKEN }}
+          oneshot: true
+          storage:
+            type: memory
+          services:
+            - type: workload-identity-jwt
+              destination:
+                type: directory
+                path: /tmp/tbot-output
+              selector:
+                name: image-push
+              audiences: ["sts.amazonaws.com"]
+          EOF_TBOT
+
+          mkdir -p /tmp/tbot-output
+
+          # tbot's oneshot mode spawns a heartbeat service alongside the
+          # workload-identity-jwt one; the heartbeat occasionally dies with a
+          # transient gRPC EOF even though the JWT was written. Trust the JWT
+          # file, then validate it against STS before using it for ECR.
+          set +e
+          tbot start -c /tmp/tbot.yaml
+          TBOT_RC=$?
+          set -e
+          if [ ! -s /tmp/tbot-output/jwt_svid ]; then
+            echo "tbot exited $TBOT_RC and did not write a JWT — failing"
+            exit 1
+          fi
+          if [ $TBOT_RC -ne 0 ]; then
+            echo "tbot exited $TBOT_RC (JWT written — likely transient heartbeat EOF; validating with STS next)"
+          fi
+
+          export AWS_WEB_IDENTITY_TOKEN_FILE=/tmp/tbot-output/jwt_svid
+          export AWS_ROLE_ARN="${{ env.AWS_ROLE_ARN }}"
+          export AWS_DEFAULT_REGION=${{ env.AWS_REGION }}
+
+          aws sts get-caller-identity > /dev/null
+
+          aws ecr get-login-password --region ${{ env.AWS_REGION }} | \
+            docker login ${{ env.ECR_REGISTRY }} --username AWS --password-stdin
+
+          aws ecr describe-repositories --repository-names ${{ env.IMAGE_NAME }} --region ${{ env.AWS_REGION }} 2>/dev/null || \
+          aws ecr create-repository --repository-name ${{ env.IMAGE_NAME }} --region ${{ env.AWS_REGION }}
+
+      - name: Build and push
+        run: |
+          SHA7=$(echo "${{ github.sha }}" | cut -c1-7)
+          TAG="master-$(date -u +%Y%m%d)-${SHA7}"
+          IMAGE=${{ env.ECR_REGISTRY }}/${{ env.IMAGE_NAME }}
+
+          docker build \
+            -f .docker/Dockerfile-maestra-distroless \
+            --build-arg HYDRA_VERSION="$TAG" \
+            --label "org.opencontainers.image.created=$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            --label "org.opencontainers.image.revision=${{ github.sha }}" \
+            --label "org.opencontainers.image.title=hydra" \
+            --label "org.opencontainers.image.source=https://github.com/maestra-io/hydra" \
+            --label "org.opencontainers.image.vendor=maestra-io" \
+            -t "$IMAGE:$TAG" \
+            -t "$IMAGE:latest" \
+            .
+          docker push "$IMAGE:$TAG"
+          docker push "$IMAGE:latest"
+          echo "pushed $IMAGE:$TAG"

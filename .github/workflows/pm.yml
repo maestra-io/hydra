@@ -16,7 +16,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - uses: ory-corp/planning-automation-action@v0.2
+      - uses: ory-corp/planning-automation-action@3d7dfbb7ffcb679bdd47dadc59627c1836dd7581 # v0.2.2
         with:
           organization: ory-corp
           project: 5

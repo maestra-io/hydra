@@ -22,12 +22,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
-        uses: ory/ci/checkout@master
+        uses: ory/ci/checkout@35878b67f40c377bcb14dce2c26cf92e53586b4a # master
         with:
           # We must fetch at least the immediate parents so that if this is
           # a pull request then we can checkout the head.
           fetch-depth: 2
-      - uses: actions/setup-go@v6
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
         with:
           check-latest: true
           go-version-file: go.mod
@@ -64,21 +64,21 @@ jobs:
             cockroachdb/cockroach:latest-v25.4 start-single-node --insecure
           docker start cockroach
         name: Start CockroachDB
-      - uses: ory/ci/checkout@master
+      - uses: ory/ci/checkout@35878b67f40c377bcb14dce2c26cf92e53586b4a # master
         with:
           fetch-depth: 2
-      - uses: actions/setup-go@v6
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
         with:
           check-latest: true
           go-version-file: go.mod
       - run: go list -json > go.list
       - name: Run nancy
-        uses: sonatype-nexus-community/nancy-github-action@v1.0.3
+        uses: sonatype-nexus-community/nancy-github-action@726e338312e68ecdd4b4195765f174d3b3ce1533 # v1.0.3
         with:
           nancyVersion: v1.0.42
       - name: Run golangci-lint
         if: ${{ github.ref_type != 'tag' }}
-        uses: golangci/golangci-lint-action@v9
+        uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
         env:
           GOGC: 100
         with:
@@ -104,8 +104,8 @@ jobs:
       HSM_TOKEN_LABEL: hydra
       HSM_PIN: 1234
     steps:
-      - uses: ory/ci/checkout@master
-      - uses: actions/setup-go@v6
+      - uses: ory/ci/checkout@35878b67f40c377bcb14dce2c26cf92e53586b4a # master
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
         with:
           check-latest: true
           go-version-file: go.mod
@@ -154,12 +154,12 @@ jobs:
             cockroachdb/cockroach:latest-v25.4 start-single-node --insecure
           docker start cockroach
         name: Start CockroachDB
-      - uses: ory/ci/checkout@master
-      - uses: actions/setup-go@v6
+      - uses: ory/ci/checkout@35878b67f40c377bcb14dce2c26cf92e53586b4a # master
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
         with:
           check-latest: true
           go-version-file: go.mod
-      - uses: actions/cache@v6
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ./test/e2e/hydra
           key: ${{ runner.os }}-hydra
@@ -171,7 +171,7 @@ jobs:
     needs:
       - test
     steps:
-      - uses: ory/ci/docs/cli-next@master
+      - uses: ory/ci/docs/cli-next@35878b67f40c377bcb14dce2c26cf92e53586b4a # master
         with:
           token: ${{ secrets.ORY_BOT_PAT }}
           output-dir: docs/hydra/cli
@@ -186,7 +186,7 @@ jobs:
       - test-hsm
       - test-e2e
     steps:
-      - uses: ory/ci/releaser@master
+      - uses: ory/ci/releaser@35878b67f40c377bcb14dce2c26cf92e53586b4a # master
         with:
           token: ${{ secrets.ORY_BOT_PAT }}
           goreleaser_key: ${{ secrets.GORELEASER_KEY }}
@@ -201,7 +201,7 @@ jobs:
     needs:
       - release
     steps:
-      - uses: ory/ci/newsletter@master
+      - uses: ory/ci/newsletter@35878b67f40c377bcb14dce2c26cf92e53586b4a # master
         with:
           mailchimp_list_id: f605a41b53
           mailchmip_segment_id: 6479481
@@ -216,7 +216,7 @@ jobs:
     needs:
       - newsletter-draft
     steps:
-      - uses: ory/ci/newsletter/slack-notify@master
+      - uses: ory/ci/newsletter/slack-notify@35878b67f40c377bcb14dce2c26cf92e53586b4a # master
         with:
           slack-webhook-url: ${{ secrets.SLACK_WEBHOOK_URL }}
 
@@ -228,7 +228,7 @@ jobs:
     if: ${{ github.ref_type == 'tag' }}
     environment: production
     steps:
-      - uses: ory/ci/newsletter@master
+      - uses: ory/ci/newsletter@35878b67f40c377bcb14dce2c26cf92e53586b4a # master
         with:
           mailchimp_list_id: f605a41b53
           mailchmip_segment_id: 6479481

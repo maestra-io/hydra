@@ -115,45 +115,32 @@ jobs:
             --image-tag-mutability IMMUTABLE_WITH_EXCLUSION \
             --image-tag-mutability-exclusion-filters 'filterType=WILDCARD,filter=latest'
 
-      - name: Build and push
-        id: push
+      - name: Compute tags
+        id: tags
         run: |
           SHA7=$(echo "${{ github.sha }}" | cut -c1-7)
-          TAG="master-$(date -u +%Y%m%d)-${SHA7}"
-          IMAGE=${{ env.ECR_REGISTRY }}/${{ env.IMAGE_NAME }}
+          echo "tag=master-$(date -u +%Y%m%d)-${SHA7}" >> "$GITHUB_OUTPUT"
+          echo "created=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
 
-          docker build \
-            -f .docker/Dockerfile-maestra-distroless \
-            --build-arg HYDRA_VERSION="$TAG" \
-            --label "org.opencontainers.image.created=$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-            --label "org.opencontainers.image.revision=${{ github.sha }}" \
-            --label "org.opencontainers.image.title=hydra" \
-            --label "org.opencontainers.image.source=https://github.com/maestra-io/hydra" \
-            --label "org.opencontainers.image.vendor=maestra-io" \
-            -t "$IMAGE:$TAG" \
-            -t "$IMAGE:latest" \
-            .
-          docker push "$IMAGE:$TAG"
-          docker push "$IMAGE:latest"
-          echo "pushed $IMAGE:$TAG"
-          echo "mirror_tags=$TAG,latest" >> "$GITHUB_OUTPUT"
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069  # v4.4.1
 
-      # Was the phase 3 dual-push mirror of the ECR eu-central-1 -> us-west-2
-      # migration; phase 6 froze eu-central-1 and this workflow now pushes
-      # straight to us-west-2, so the mirror has nothing to copy and is off
-      # (https://github.com/maestra-io/issues-maestra/issues/1354, rake #8).
-      # This workflow pushes with its own docker push, so it bypasses the
-      # dual-push already built into the shared composite actions.
-      - name: Mirror images to the secondary ECR region (off since phase 6)
-        uses: maestra-io/github-actions/mirror-to-secondary-ecr@main
+      # BuildKit pushes only the layers ECR lacks; `docker push` from the fresh
+      # runner daemon re-uploaded every layer of every release.
+      - name: Build and push
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc  # v7.4.0
         with:
-          # Phase 6 (https://github.com/maestra-io/issues-maestra/issues/1354):
-          # eu-central-1 is frozen, us-west-2 is the only push target, so there
-          # is nothing left to mirror. Empty skips the whole step. Kept as a
-          # call so restoring a mirror is one value.
-          secondaryRegion: ''
-          repository: ${{ env.IMAGE_NAME }}
-          tag: ${{ steps.push.outputs.mirror_tags }}
-          registry: ${{ env.ECR_REGISTRY }}
-          awsRoleArn: ${{ env.AWS_ROLE_ARN }}
-          awsWebIdentityTokenFile: /tmp/tbot-output/jwt_svid
+          context: .
+          file: .docker/Dockerfile-maestra-distroless
+          build-args: |
+            HYDRA_VERSION=${{ steps.tags.outputs.tag }}
+          labels: |
+            org.opencontainers.image.created=${{ steps.tags.outputs.created }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.title=hydra
+            org.opencontainers.image.source=https://github.com/maestra-io/hydra
+            org.opencontainers.image.vendor=maestra-io
+          provenance: false
+          push: true
+          tags: |
+            ${{ env.ECR_REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.tags.outputs.tag }}
+            ${{ env.ECR_REGISTRY }}/${{ env.IMAGE_NAME }}:latest

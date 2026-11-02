@@ -144,7 +144,7 @@ jobs:
           # Layer cache (type=gha): the go mod download layer survives between
           # master builds, only the layers after `COPY . .` rebuild.
           cache-from: type=gha,scope=hydra
-          cache-to: type=gha,mode=max,scope=hydra
+          cache-to: type=gha,mode=max,scope=hydra,ignore-error=true
           tags: |
             ${{ env.ECR_REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.tags.outputs.tag }}
             ${{ env.ECR_REGISTRY }}/${{ env.IMAGE_NAME }}:latest

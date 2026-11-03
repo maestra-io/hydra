@@ -24,8 +24,13 @@ COPY go.mod go.sum ./
 COPY internal/httpclient/go.* ./internal/httpclient/
 
 # Modules through nora (packages.maestra.io, 3-day hold, issues-maestra#1649): CI passes
-# its token as the PRIVATE_PACKAGES_TOKEN secret; a local build keeps the default proxy.
+# its token as the PRIVATE_PACKAGES_TOKEN secret and GO_MODULE_SOURCE=nora; a local build
+# keeps the default proxy. GO_MODULE_SOURCE keys the layer cache by source (BuildKit
+# leaves secrets out of the key), so a tokenless layer is never reused under nora.
+ARG GO_MODULE_SOURCE=proxy.golang.org
 RUN --mount=type=secret,id=PRIVATE_PACKAGES_TOKEN,env=NORA_TOKEN \
+    if [ "$GO_MODULE_SOURCE" = nora ] && [ -z "${NORA_TOKEN:-}" ]; then \
+      echo "GO_MODULE_SOURCE=nora needs the PRIVATE_PACKAGES_TOKEN secret" >&2; exit 1; fi && \
     GOPROXY="${NORA_TOKEN:+https://token:${NORA_TOKEN}@packages.maestra.io/go}" go mod download
 
 COPY . .

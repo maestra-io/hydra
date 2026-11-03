@@ -139,6 +139,7 @@ jobs:
           file: .docker/Dockerfile-maestra-distroless
           build-args: |
             HYDRA_VERSION=${{ steps.tags.outputs.tag }}
+            GO_MODULE_SOURCE=${{ steps.nora.outputs.token && 'nora' || 'proxy.golang.org' }}
           labels: |
             org.opencontainers.image.created=${{ steps.tags.outputs.created }}
             org.opencontainers.image.revision=${{ github.sha }}

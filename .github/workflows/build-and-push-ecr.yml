@@ -150,10 +150,16 @@ jobs:
             ${{ env.ECR_REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.tags.outputs.tag }}
             ${{ env.ECR_REGISTRY }}/${{ env.IMAGE_NAME }}:latest
 
+      # The login step's JWT-SVID lives 5 minutes (Teleport default) and the
+      # build can outlast it; the SBOM pull needs fresh AWS credentials.
+      - name: Refresh the Teleport JWT for signing
+        continue-on-error: true
+        run: tbot start -c /tmp/tbot.yaml
+
       # Keyless cosign signature + CycloneDX SBOM attestation (issues-maestra#1648).
       # The tbot JWT is exported only inside the login step; hand it to aws here.
       - name: Sign and attest the image
-        uses: maestra-io/github-actions/sign-image@a0e5143b4ba2e0119de2bf32b55ee79e68b71c06 # v1.61.2
+        uses: maestra-io/github-actions/sign-image@bdfea43a7d47149012fa1a488c91e5d6a49b2744 # v1.62.2
         env:
           AWS_WEB_IDENTITY_TOKEN_FILE: /tmp/tbot-output/jwt_svid
         with:

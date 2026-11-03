@@ -124,6 +124,11 @@ jobs:
 
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069  # v4.4.1
 
+      # Right before the build: the Docker secret carries a token minted here.
+      - name: go modules through nora
+        id: nora
+        uses: maestra-io/github-actions/go-nora@be3edebf65de183a5a0c3b02bcc0cd064198cdf5 # v1.62.4
+
       # BuildKit pushes only the layers ECR lacks; `docker push` from the fresh
       # runner daemon re-uploaded every layer of every release.
       - name: Build and push
@@ -134,6 +139,7 @@ jobs:
           file: .docker/Dockerfile-maestra-distroless
           build-args: |
             HYDRA_VERSION=${{ steps.tags.outputs.tag }}
+            GO_MODULE_SOURCE=${{ steps.nora.outputs.token && 'nora' || 'proxy.golang.org' }}
           labels: |
             org.opencontainers.image.created=${{ steps.tags.outputs.created }}
             org.opencontainers.image.revision=${{ github.sha }}
@@ -146,6 +152,8 @@ jobs:
           # master builds, only the layers after `COPY . .` rebuild.
           cache-from: type=gha,scope=hydra
           cache-to: type=gha,mode=max,scope=hydra,ignore-error=true
+          secrets: |
+            PRIVATE_PACKAGES_TOKEN=${{ steps.nora.outputs.token }}
           tags: |
             ${{ env.ECR_REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.tags.outputs.tag }}
             ${{ env.ECR_REGISTRY }}/${{ env.IMAGE_NAME }}:latest

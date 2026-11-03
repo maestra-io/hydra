@@ -23,7 +23,15 @@ RUN mkdir -p ./internal/httpclient
 COPY go.mod go.sum ./
 COPY internal/httpclient/go.* ./internal/httpclient/
 
-RUN go mod download
+# Modules through nora (packages.maestra.io, 3-day hold, issues-maestra#1649): CI passes
+# its token as the PRIVATE_PACKAGES_TOKEN secret and GO_MODULE_SOURCE=nora; a local build
+# keeps the default proxy. GO_MODULE_SOURCE keys the layer cache by source (BuildKit
+# leaves secrets out of the key), so a tokenless layer is never reused under nora.
+ARG GO_MODULE_SOURCE=proxy.golang.org
+RUN --mount=type=secret,id=PRIVATE_PACKAGES_TOKEN,env=NORA_TOKEN \
+    if [ "$GO_MODULE_SOURCE" = nora ] && [ -z "${NORA_TOKEN:-}" ]; then \
+      echo "GO_MODULE_SOURCE=nora needs the PRIVATE_PACKAGES_TOKEN secret" >&2; exit 1; fi && \
+    GOPROXY="${NORA_TOKEN:+https://token:${NORA_TOKEN}@packages.maestra.io/go}" go mod download
 
 COPY . .
 
@@ -31,8 +39,12 @@ COPY . .
 # HIGHs). Applied only when the checked-out go.mod is BELOW the floor, so an
 # upstream bump past it is never downgraded and go.mod in the repo stays
 # identical to upstream (no merge conflicts on "Update branch"). Extend the
-# floor list if the board flags more.
-RUN set -eu; \
+# floor list if the board flags more. `go get` / `go mod tidy` fetch through nora as well.
+RUN --mount=type=secret,id=PRIVATE_PACKAGES_TOKEN,env=NORA_TOKEN \
+    set -eu; \
+    if [ "$GO_MODULE_SOURCE" = nora ] && [ -z "${NORA_TOKEN:-}" ]; then \
+      echo "GO_MODULE_SOURCE=nora needs the PRIVATE_PACKAGES_TOKEN secret" >&2; exit 1; fi; \
+    export GOPROXY="${NORA_TOKEN:+https://token:${NORA_TOKEN}@packages.maestra.io/go}"; \
     floor() { \
       cur="$(go list -m -f '{{.Version}}' "$1")"; \
       if [ "$(printf '%s\n%s\n' "$2" "$cur" | sort -V | head -n1)" != "$2" ]; then \

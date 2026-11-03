@@ -42,6 +42,8 @@ COPY . .
 # floor list if the board flags more. `go get` / `go mod tidy` fetch through nora as well.
 RUN --mount=type=secret,id=PRIVATE_PACKAGES_TOKEN,env=NORA_TOKEN \
     set -eu; \
+    if [ "$GO_MODULE_SOURCE" = nora ] && [ -z "${NORA_TOKEN:-}" ]; then \
+      echo "GO_MODULE_SOURCE=nora needs the PRIVATE_PACKAGES_TOKEN secret" >&2; exit 1; fi; \
     export GOPROXY="${NORA_TOKEN:+https://token:${NORA_TOKEN}@packages.maestra.io/go}"; \
     floor() { \
       cur="$(go list -m -f '{{.Version}}' "$1")"; \

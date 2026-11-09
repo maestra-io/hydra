@@ -124,7 +124,8 @@ jobs:
 
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069  # v4.4.1
 
-      # Right before the build: the Docker secret carries a token minted here.
+      # Right before the build: the Docker secret carries a token minted here. No public
+      # fallback: without the token the Dockerfile's `go mod download` fails (issues-maestra#1649).
       - name: go modules through nora
         id: nora
         uses: maestra-io/github-actions/go-nora@be3edebf65de183a5a0c3b02bcc0cd064198cdf5 # v1.62.4
@@ -139,7 +140,7 @@ jobs:
           file: .docker/Dockerfile-maestra-distroless
           build-args: |
             HYDRA_VERSION=${{ steps.tags.outputs.tag }}
-            GO_MODULE_SOURCE=${{ steps.nora.outputs.token && 'nora' || 'proxy.golang.org' }}
+            GO_MODULE_SOURCE=nora
           labels: |
             org.opencontainers.image.created=${{ steps.tags.outputs.created }}
             org.opencontainers.image.revision=${{ github.sha }}

@@ -11,7 +11,7 @@
 #   - runtime base is `nonroot` (no busybox), not `debug-nonroot`;
 #   - the version the binary reports is stamped via HYDRA_VERSION
 #     (same -X target goreleaser uses: .goreleaser.yml `buildinfo_tag`).
-FROM golang:1.26 AS builder
+FROM golang:1.27 AS builder
 
 WORKDIR /go/src/github.com/ory/hydra
 
@@ -54,6 +54,8 @@ RUN --mount=type=secret,id=PRIVATE_PACKAGES_TOKEN,env=NORA_TOKEN \
       fi; \
     }; \
     floor golang.org/x/mod v0.40.0; \
+    floor golang.org/x/net v0.62.0; \
+    floor google.golang.org/grpc v1.85.0; \
     go mod tidy
 
 ARG HYDRA_VERSION=master
@@ -65,7 +67,7 @@ RUN CGO_ENABLED=0 go build -buildvcs=false \
     -ldflags "-X github.com/ory/hydra/v2/driver/config.Version=${HYDRA_VERSION}" \
     -o /usr/bin/hydra
 
-FROM gcr.io/distroless/static-debian12:nonroot
+FROM gcr.io/distroless/static-debian13:nonroot
 
 COPY --from=builder /usr/bin/hydra /usr/bin/hydra
 

@@ -1,4 +1,5 @@
-FROM gcr.io/distroless/static-debian12:nonroot
+# Base image through nora (packages.maestra.io, 3-day hold, issues-maestra#1649).
+FROM packages.maestra.io/gcr/distroless/static-debian12:nonroot@sha256:afa5c872c891853ca7fcf1f12c3edb23f7eeef36189728842dd51042ff57f7ab
 
 COPY hydra /usr/bin/hydra
 # Declare the standard ports used by hydra (4444 for public service endpoint, 4445 for admin service endpoint)

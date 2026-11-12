@@ -1,4 +1,7 @@
-FROM golang:1.26 AS builder
+# Packages, Go modules and base images only through nora (packages.maestra.io, 3-day hold,
+# issues-maestra#1649), no public fallback: the PRIVATE_PACKAGES_TOKEN BuildKit secret is
+# required (CI: the GitHub OIDC token; locally: your nra_ token). GOSUMDB stays default.
+FROM packages.maestra.io/docker-hub/library/golang:1.26@sha256:978e0a4e3d953662577d784471db27742f543ab09eead06839a838188c73314b AS builder
 
 WORKDIR /go/src/github.com/ory/hydra
 
@@ -6,13 +9,16 @@ COPY oryx/go.mod oryx/go.mod
 COPY oryx/go.sum oryx/go.sum
                 
 
-RUN apt-get update && apt-get upgrade -y &&\
+RUN --mount=type=secret,id=PRIVATE_PACKAGES_TOKEN,required=true \
+    --mount=type=bind,from=public.ecr.aws/g5f9s8a4/nora-apt:1.0.0@sha256:cd5fcec38f8b7c4fdd283d41f49ac656751d4deed168111f89f44976a43a8178,target=/nora-apt,rw \
+    . /nora-apt/env.sh && apt-get update && apt-get upgrade -y &&\
     mkdir -p ./internal/httpclient
 
 COPY go.mod go.sum ./
 COPY internal/httpclient/go.* ./internal/httpclient/
 
-RUN go mod download
+RUN --mount=type=secret,id=PRIVATE_PACKAGES_TOKEN,env=NORA_TOKEN,required=true \
+    GOPROXY="https://token:${NORA_TOKEN}@packages.maestra.io/go" go mod download
 
 COPY . .
 # -buildvcs=false keeps the main module unversioned even if .git ever returns to
@@ -27,7 +33,7 @@ RUN CGO_ENABLED=0 go build -buildvcs=false -o /usr/bin/hydra
 
 #########################
 
-FROM gcr.io/distroless/static-debian12:debug-nonroot AS runner
+FROM packages.maestra.io/gcr/distroless/static-debian12:debug-nonroot@sha256:d5563cc7f2f44313f332e91138cc8c6a158899afeeeab2fce3b0f9ccdb3cf9ee AS runner
 
 COPY --from=builder /usr/bin/hydra /usr/bin/hydra
 

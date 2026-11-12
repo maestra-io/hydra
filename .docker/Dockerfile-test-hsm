@@ -1,6 +1,10 @@
-FROM golang:1.26-alpine3.23 AS builder
+# Packages, Go modules and base images only through nora (packages.maestra.io, 3-day hold,
+# issues-maestra#1649), no public fallback: the PRIVATE_PACKAGES_TOKEN BuildKit secret is
+# required (CI: the GitHub OIDC token; locally: your nra_ token). GOSUMDB stays default.
+FROM packages.maestra.io/docker-hub/library/golang:1.26-alpine3.23@sha256:308364e4127bfa2b8d40676ef0b7627584f0f6f9e340f73929b01316fe35a222 AS builder
 
-RUN apk add --no-cache build-base git gcc bash
+RUN --mount=type=secret,id=PRIVATE_PACKAGES_TOKEN,required=true --mount=type=bind,from=public.ecr.aws/g5f9s8a4/nora-apk:1.0.0@sha256:55df38687c301e6fefa230dc1c71a8841618214cc549ade71be740b25822a00e,target=/nora-apk \
+    /nora-apk/nora-apk add --no-cache build-base git gcc bash
 
 WORKDIR /go/src/github.com/ory/hydra
 RUN mkdir -p ./internal/httpclient
@@ -14,7 +18,8 @@ COPY internal/httpclient/go.* ./internal/httpclient
 
 ENV CGO_ENABLED=1
 
-RUN go mod download
+RUN --mount=type=secret,id=PRIVATE_PACKAGES_TOKEN,env=NORA_TOKEN,required=true \
+    GOPROXY="https://token:${NORA_TOKEN}@packages.maestra.io/go" go mod download
 COPY . .
 
 RUN go build -tags hsm -o /usr/bin/hydra
@@ -24,7 +29,8 @@ ENV HSM_LIBRARY=/usr/lib/softhsm/libsofthsm2.so
 ENV HSM_TOKEN_LABEL=hydra
 ENV HSM_PIN=1234
 
-RUN apk add --no-cache softhsm opensc
+RUN --mount=type=secret,id=PRIVATE_PACKAGES_TOKEN,required=true --mount=type=bind,from=public.ecr.aws/g5f9s8a4/nora-apk:1.0.0@sha256:55df38687c301e6fefa230dc1c71a8841618214cc549ade71be740b25822a00e,target=/nora-apk \
+    /nora-apk/nora-apk add --no-cache softhsm opensc
 RUN pkcs11-tool --module "$HSM_LIBRARY" --slot 0 --init-token --so-pin 0000 --init-pin --pin "$HSM_PIN" --label "$HSM_TOKEN_LABEL"
 
 FROM builder AS test-hsm

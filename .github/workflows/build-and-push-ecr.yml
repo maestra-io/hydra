@@ -130,6 +130,12 @@ jobs:
         id: nora
         uses: maestra-io/github-actions/go-nora@be3edebf65de183a5a0c3b02bcc0cd064198cdf5 # v1.62.4
 
+      # FROM images (golang, distroless) come through nora too (issues-maestra#1649).
+      - name: Registry login (nora for FROM)
+        env:
+          NORA_TOKEN: ${{ steps.nora.outputs.token }}
+        run: docker login --username token --password-stdin packages.maestra.io <<<"$NORA_TOKEN"
+
       # BuildKit pushes only the layers ECR lacks; `docker push` from the fresh
       # runner daemon re-uploaded every layer of every release.
       - name: Build and push
@@ -140,7 +146,6 @@ jobs:
           file: .docker/Dockerfile-maestra-distroless
           build-args: |
             HYDRA_VERSION=${{ steps.tags.outputs.tag }}
-            GO_MODULE_SOURCE=nora
           labels: |
             org.opencontainers.image.created=${{ steps.tags.outputs.created }}
             org.opencontainers.image.revision=${{ github.sha }}

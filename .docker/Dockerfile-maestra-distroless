@@ -11,7 +11,7 @@
 #   - runtime base is `nonroot` (no busybox), not `debug-nonroot`;
 #   - the version the binary reports is stamped via HYDRA_VERSION
 #     (same -X target goreleaser uses: .goreleaser.yml `buildinfo_tag`).
-FROM golang:1.27 AS builder
+FROM packages.maestra.io/docker-hub/library/golang:1.27@sha256:ec47ea3725fea0cc88f6de94919aef19f40f12fc1ec0e2d1b3426dbf15ecca04 AS builder
 
 WORKDIR /go/src/github.com/ory/hydra
 
@@ -23,15 +23,11 @@ RUN mkdir -p ./internal/httpclient
 COPY go.mod go.sum ./
 COPY internal/httpclient/go.* ./internal/httpclient/
 
-# Modules through nora (packages.maestra.io, 3-day hold, issues-maestra#1649): CI passes
-# its token as the PRIVATE_PACKAGES_TOKEN secret and GO_MODULE_SOURCE=nora; a local build
-# keeps the default proxy. GO_MODULE_SOURCE keys the layer cache by source (BuildKit
-# leaves secrets out of the key), so a tokenless layer is never reused under nora.
-ARG GO_MODULE_SOURCE=proxy.golang.org
-RUN --mount=type=secret,id=PRIVATE_PACKAGES_TOKEN,env=NORA_TOKEN \
-    if [ "$GO_MODULE_SOURCE" = nora ] && [ -z "${NORA_TOKEN:-}" ]; then \
-      echo "GO_MODULE_SOURCE=nora needs the PRIVATE_PACKAGES_TOKEN secret" >&2; exit 1; fi && \
-    GOPROXY="${NORA_TOKEN:+https://token:${NORA_TOKEN}@packages.maestra.io/go}" go mod download
+# Modules only through nora (packages.maestra.io, 3-day hold, issues-maestra#1649), no
+# public fallback: the PRIVATE_PACKAGES_TOKEN secret is required (CI mints it; locally your
+# nra_ token). GOSUMDB stays default, so go.sum is still checked against sum.golang.org.
+RUN --mount=type=secret,id=PRIVATE_PACKAGES_TOKEN,env=NORA_TOKEN,required=true \
+    GOPROXY="https://token:${NORA_TOKEN}@packages.maestra.io/go" go mod download
 
 COPY . .
 
@@ -40,11 +36,9 @@ COPY . .
 # upstream bump past it is never downgraded and go.mod in the repo stays
 # identical to upstream (no merge conflicts on "Update branch"). Extend the
 # floor list if the board flags more. `go get` / `go mod tidy` fetch through nora as well.
-RUN --mount=type=secret,id=PRIVATE_PACKAGES_TOKEN,env=NORA_TOKEN \
+RUN --mount=type=secret,id=PRIVATE_PACKAGES_TOKEN,env=NORA_TOKEN,required=true \
     set -eu; \
-    if [ "$GO_MODULE_SOURCE" = nora ] && [ -z "${NORA_TOKEN:-}" ]; then \
-      echo "GO_MODULE_SOURCE=nora needs the PRIVATE_PACKAGES_TOKEN secret" >&2; exit 1; fi; \
-    export GOPROXY="${NORA_TOKEN:+https://token:${NORA_TOKEN}@packages.maestra.io/go}"; \
+    export GOPROXY="https://token:${NORA_TOKEN}@packages.maestra.io/go"; \
     floor() { \
       cur="$(go list -m -f '{{.Version}}' "$1")"; \
       if [ "$(printf '%s\n%s\n' "$2" "$cur" | sort -V | head -n1)" != "$2" ]; then \
@@ -67,7 +61,7 @@ RUN CGO_ENABLED=0 go build -buildvcs=false \
     -ldflags "-X github.com/ory/hydra/v2/driver/config.Version=${HYDRA_VERSION}" \
     -o /usr/bin/hydra
 
-FROM gcr.io/distroless/static-debian13:nonroot
+FROM packages.maestra.io/gcr/distroless/static-debian13:nonroot@sha256:25ac8f0c3b2334a9eb05452266bd4697864a8c8ef0ef71e5e6480d7f92868329
 
 COPY --from=builder /usr/bin/hydra /usr/bin/hydra
 

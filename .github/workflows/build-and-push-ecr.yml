@@ -122,7 +122,7 @@ jobs:
           echo "tag=master-$(date -u +%Y%m%d)-${SHA7}" >> "$GITHUB_OUTPUT"
           echo "created=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
 
-      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069  # v4.4.1
+      - uses: maestra-io/github-actions/setup-buildx@695d3e1cf135034b04c21640c13273f24867f24b # v1.85.0
 
       # Right before the build: the Docker secret carries a token minted here. No public
       # fallback: without the token the Dockerfile's `go mod download` fails (issues-maestra#1649).

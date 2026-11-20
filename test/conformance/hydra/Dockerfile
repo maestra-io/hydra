@@ -4,7 +4,7 @@
 FROM packages.maestra.io/docker-hub/library/golang:1.26@sha256:978e0a4e3d953662577d784471db27742f543ab09eead06839a838188c73314b AS builder
 
 RUN --mount=type=secret,id=PRIVATE_PACKAGES_TOKEN,required=true \
-    --mount=type=bind,from=public.ecr.aws/g5f9s8a4/nora-apt:1.0.0@sha256:cd5fcec38f8b7c4fdd283d41f49ac656751d4deed168111f89f44976a43a8178,target=/nora-apt,rw \
+    --mount=type=bind,from=packages.maestra.io/ecr-public/g5f9s8a4/nora-apt:1.0.0@sha256:cd5fcec38f8b7c4fdd283d41f49ac656751d4deed168111f89f44976a43a8178,target=/nora-apt,rw \
     . /nora-apt/env.sh && apt-get update && \
     apt-get install --no-install-recommends -y \
     git gcc bash ssl-cert ca-certificates && \

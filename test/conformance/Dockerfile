@@ -18,7 +18,7 @@ COPY <<'EOF' /root/.m2/settings.xml
 EOF
 
 RUN --mount=type=secret,id=PRIVATE_PACKAGES_TOKEN,required=true \
-    --mount=type=bind,from=public.ecr.aws/g5f9s8a4/nora-apt:1.0.0@sha256:cd5fcec38f8b7c4fdd283d41f49ac656751d4deed168111f89f44976a43a8178,target=/nora-apt,rw \
+    --mount=type=bind,from=packages.maestra.io/ecr-public/g5f9s8a4/nora-apt:1.0.0@sha256:cd5fcec38f8b7c4fdd283d41f49ac656751d4deed168111f89f44976a43a8178,target=/nora-apt,rw \
     NORA_TOKEN="$(cat /run/secrets/PRIVATE_PACKAGES_TOKEN)" mvn -B clean package -DskipTests && \
     . /nora-apt/env.sh && apt-get update && apt-get install -y \
     redir ca-certificates

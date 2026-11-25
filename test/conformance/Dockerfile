@@ -5,6 +5,7 @@ FROM packages.maestra.io/docker-hub/library/maven:3-jdk-11@sha256:805f366910aea2
 WORKDIR /usr/src/mymaven
 
 RUN wget https://gitlab.com/openid/conformance-suite/-/archive/release-v4.1.4/conformance-suite-release-v4.1.4.zip && \
+  echo "8f3f910ede644b06e7ac5816f89635bab36de0c39605b5f72d6c7468692268e6  conformance-suite-release-v4.1.4.zip" | sha256sum -c - && \
   unzip conformance-suite-release-v4.1.4.zip -d . && \
   rm conformance-suite-release-v4.1.4.zip && \
   find conformance-suite-release-v4.1.4 -maxdepth 1 -mindepth 1 -exec mv {} . \; && \

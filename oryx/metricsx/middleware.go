@@ -204,14 +204,20 @@ func New(
 }
 
 // Identify enables reporting to segment.
+//
+// Opted out (sqa.opt_out / --sqa-opt-out / SQA_OPT_OUT), nothing is sent: upstream still
+// enqueues one startup Identify with IsOptOut=true, and the batch (Interval 6h) dials
+// sqa.ory.sh six hours after start, which a default-deny egress policy drops.
 func (sw *Service) Identify() {
+	if sw.optOut {
+		return
+	}
+
 	IdentifySend(sw, true)
 
 	// User has not opt-out then make identify to be sent every 6 hours
-	if !sw.optOut {
-		for range time.Tick(time.Hour * 6) {
-			IdentifySend(sw, false)
-		}
+	for range time.Tick(time.Hour * 6) {
+		IdentifySend(sw, false)
 	}
 }
 
